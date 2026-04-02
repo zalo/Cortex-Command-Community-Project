@@ -1,5 +1,6 @@
 #include "MovableMan.h"
 #include "Box2DManager.h"
+#include "FluidManager.h"
 #include "TimerMan.h"
 
 #ifdef __EMSCRIPTEN__
@@ -1749,6 +1750,11 @@ void MovableMan::Travel() {
 #endif
 	}
 
+	// --- Fluid Phase ---
+	if (g_FluidMan.IsEnabled() && g_FluidMan.GetParticleCount() > 0) {
+		g_FluidMan.Step(g_TimerMan.GetDeltaTimeSecs());
+	}
+
 	// Travel Actors
 	{
 		ZoneScopedN("Actors Travel");
@@ -1867,6 +1873,11 @@ void MovableMan::DrawMatter(BITMAP* pTargetBitmap, Vector& targetPos) {
 
 	for (std::deque<MovableObject*>::iterator parIt = --m_Particles.end(); parIt != --m_Particles.begin(); --parIt)
 		(*parIt)->Draw(pTargetBitmap, targetPos, g_DrawMaterial);
+
+	// Draw fluid particles as material
+	if (g_FluidMan.IsEnabled()) {
+		g_FluidMan.DrawMatter(pTargetBitmap, targetPos);
+	}
 }
 
 void MovableMan::VerifyMOIDIndex() {
@@ -1972,6 +1983,11 @@ void MovableMan::Draw(BITMAP* pTargetBitmap, const Vector& targetPos) {
 
 		for (std::deque<MovableObject*>::iterator parIt = m_Particles.begin(); parIt != m_Particles.end(); ++parIt) {
 			(*parIt)->Draw(pTargetBitmap, targetPos);
+		}
+
+		// Draw fluid particles
+		if (g_FluidMan.IsEnabled()) {
+			g_FluidMan.Draw(pTargetBitmap, targetPos);
 		}
 	}
 

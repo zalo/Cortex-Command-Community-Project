@@ -29,6 +29,7 @@ sources += files(
 'PieQuadrant.cpp',
 'SpatialPartitionGrid.cpp',
 'WebPlatform.cpp',
+'FluidSolver.cpp',
 )
 
 if host_machine.system() == 'emscripten'

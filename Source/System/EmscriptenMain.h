@@ -51,6 +51,7 @@
 #include "GameActivity.h"
 #include "CameraMan.h"
 #include "Box2DManager.h"
+#include "FluidManager.h"
 #include "Constants.h"
 
 namespace RTE {
@@ -282,6 +283,38 @@ inline void WebMainLoopIteration_Impl() {
         // Box2D debug overlay — draws onto the 32bpp GUI buffer
         if (g_Box2DMan.IsActive() && g_Box2DMan.IsDebugDrawEnabled()) {
             g_Box2DMan.DrawDebug();
+        }
+
+        // Fluid debug toggle (F10) and spawn (F11)
+        {
+            static bool f10WasDown = false;
+            bool f10Down = EM_ASM_INT({ return window._ccFluidDebug ? 1 : 0; });
+            if (f10Down && !f10WasDown) {
+                g_FluidMan.SetDebugDraw(!g_FluidMan.IsDebugDrawEnabled());
+                EM_ASM({ console.log('[Fluid] Debug draw ' + ($0 ? 'ON' : 'OFF')); },
+                       g_FluidMan.IsDebugDrawEnabled());
+            }
+            f10WasDown = f10Down;
+
+            // F11: spawn a 100x60 rectangle of water at screen center
+            static bool f11WasDown = false;
+            bool f11Down = EM_ASM_INT({ return window._ccFluidSpawn ? 1 : 0; });
+            if (f11Down && !f11WasDown) {
+                // Spawn at camera center
+                Vector camPos = g_CameraMan.GetScrollTarget();
+                float halfW = g_FrameMan.GetPlayerScreenWidth() * 0.5f;
+                float halfH = g_FrameMan.GetPlayerScreenHeight() * 0.5f;
+                g_FluidMan.SpawnFluidRect(camPos.GetX() + halfW - 50,
+                                          camPos.GetY() + halfH - 80,
+                                          100, 60, 160); // 160 = Water material
+            }
+            f11WasDown = f11Down;
+        }
+
+        // Fluid debug overlay
+        if (g_FluidMan.IsEnabled() && g_FluidMan.IsDebugDrawEnabled()) {
+            Vector camOffset = g_CameraMan.GetOffset(0);
+            g_FluidMan.DrawDebug(g_FrameMan.GetBackBuffer32(), camOffset);
         }
 
         g_WindowMan.DrawPostProcessBuffer();

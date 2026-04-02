@@ -85,6 +85,27 @@ window._ccFlipDebug = {
 // Box2D debug draw starts ON
 window._ccBox2DDebug = 1;
 
+// Fluid debug/spawn key bindings
+window._ccFluidDebug = 0;
+window._ccFluidSpawn = 0;
+(function() {
+  document.addEventListener('keydown', function(e) {
+    // F10: toggle fluid debug draw
+    if (e.key === 'F10') {
+      e.preventDefault();
+      window._ccFluidDebug = 1;
+      setTimeout(function() { window._ccFluidDebug = 0; }, 100);
+    }
+    // F11: spawn water rectangle at screen center
+    if (e.key === 'F11') {
+      e.preventDefault();
+      window._ccFluidSpawn = 1;
+      setTimeout(function() { window._ccFluidSpawn = 0; }, 100);
+      console.log('[Fluid] Spawning water...');
+    }
+  });
+})();
+
 // ---------------------------------------------------------------------------
 // Audio context unlock — browsers require a user gesture before audio plays.
 // Resumes the game's _ccAudioCtx and SDL's AudioContext on first interaction.

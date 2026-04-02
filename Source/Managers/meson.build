@@ -23,7 +23,8 @@ sources += files(
 'TimerMan.cpp',
 'UInputMan.cpp',
 'WindowMan.cpp',
-'Box2DManager.cpp'
+'Box2DManager.cpp',
+'FluidManager.cpp'
 )
 luaman_cpp_args = preprocessor_flags
 defaults_override = []
