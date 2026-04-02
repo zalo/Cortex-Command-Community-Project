@@ -288,7 +288,15 @@ void PollSDLEvents() {
 // WebPlatform.cpp forward-declares RTE::WebMainLoopIteration() — define it here.
 namespace RTE {
 void WebMainLoopIteration() {
-    WebMainLoopIteration_Impl();
+    try {
+        WebMainLoopIteration_Impl();
+    } catch (const std::exception& e) {
+        EM_ASM({ console.error('[CC] C++ exception in main loop: ' + UTF8ToString($0)); }, e.what());
+    } catch (int errCode) {
+        EM_ASM({ console.error('[CC] C++ int exception in main loop: ' + $0 + ' (0x' + $0.toString(16) + ')'); }, errCode);
+    } catch (...) {
+        EM_ASM({ console.error('[CC] Unknown C++ exception in main loop — game continues'); });
+    }
 }
 } // namespace RTE
 #endif

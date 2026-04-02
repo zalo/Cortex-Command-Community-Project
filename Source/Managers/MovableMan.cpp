@@ -2,6 +2,10 @@
 #include "Box2DManager.h"
 #include "TimerMan.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #include "PrimitiveMan.h"
 #include "PostProcessMan.h"
 #include "PerformanceMan.h"
@@ -1705,6 +1709,9 @@ void MovableMan::Travel() {
 
 	// --- Box2D Phase: Sync, Step, Process contacts ---
 	if (g_Box2DMan.IsActive()) {
+#ifdef __EMSCRIPTEN__
+	  try {
+#endif
 		// Register any new actors/items that don't have Box2D bodies yet
 		for (Actor* actor : m_Actors) {
 			if (!g_Box2DMan.HasBody(actor)) {
@@ -1733,6 +1740,13 @@ void MovableMan::Travel() {
 		g_Box2DMan.PreStep();
 		g_Box2DMan.Step(g_TimerMan.GetDeltaTimeSecs());
 		g_Box2DMan.PostStep();
+#ifdef __EMSCRIPTEN__
+	  } catch (const std::exception& e) {
+		EM_ASM({ console.error('[Box2D] Exception in physics phase: ' + UTF8ToString($0)); }, e.what());
+	  } catch (...) {
+		EM_ASM({ console.error('[Box2D] Unknown exception in physics phase — skipping frame'); });
+	  }
+#endif
 	}
 
 	// Travel Actors

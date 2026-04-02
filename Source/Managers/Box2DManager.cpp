@@ -268,12 +268,6 @@ bool Box2DManager::HasBody(const MOSRotating* owner) const {
 void Box2DManager::PreStep() {
     if (!b2World_IsValid(m_WorldId)) return;
 
-    // NOTE: Terrain chain shapes disabled — the Atom system handles pixel-perfect
-    // terrain collision far more accurately than a simplified chain surface.
-    // The chain was only the topmost solid pixel per column (missed caves,
-    // overhangs, interior terrain). Keeping BuildTerrainChains() for future
-    // use but not calling it in the active loop.
-
     // Clean up bodies whose owners have been removed from the game
     std::vector<long> toRemove;
     for (auto& [uid, bodyId] : m_BodyMap) {
@@ -283,7 +277,15 @@ void Box2DManager::PreStep() {
         }
         MovableObject* mo = static_cast<MovableObject*>(b2Body_GetUserData(bodyId));
         if (!mo || !g_MovableMan.ValidMO(mo)) {
+#ifdef __EMSCRIPTEN__
+            try {
+#endif
             b2DestroyBody(bodyId);
+#ifdef __EMSCRIPTEN__
+            } catch (...) {
+                EM_ASM({ console.error('[Box2D] Exception destroying stale body uid=' + $0); }, (int)uid);
+            }
+#endif
             toRemove.push_back(uid);
         }
     }
@@ -313,7 +315,19 @@ void Box2DManager::Step(float deltaTime) {
     }
 
     // 4 sub-steps for accuracy (Box2D v3 recommendation)
+#ifdef __EMSCRIPTEN__
+    try {
+#endif
     b2World_Step(m_WorldId, deltaTime, 4);
+#ifdef __EMSCRIPTEN__
+    } catch (const std::exception& e) {
+        EM_ASM({ console.error('[Box2D] Exception in b2World_Step: ' + UTF8ToString($0) +
+                 ' bodies=' + $1); }, e.what(), counters.bodyCount);
+    } catch (...) {
+        EM_ASM({ console.error('[Box2D] Unknown exception in b2World_Step, bodies=' + $0); },
+               counters.bodyCount);
+    }
+#endif
 }
 
 void Box2DManager::PostStep() {

@@ -260,25 +260,56 @@
       if (e.filename) msg += ' at ' + e.filename + ':' + e.lineno;
       // Check if this is a WASM integer exception (C++ throw)
       if (typeof e.error === 'number') {
-        msg += ' [C++ exception ptr: 0x' + e.error.toString(16) + ']';
-        // Try to read exception message from WASM memory
+        var ptr = e.error;
+        msg += ' [C++ exception ptr: 0x' + ptr.toString(16) + ']';
+        // Use Emscripten's getExceptionMessage if available (requires -fexceptions)
         try {
-          if (Module && Module.HEAPU8) {
-            var ptr = e.error;
-            // C++ exceptions often have a what() string nearby
-            var str = '';
-            for (var i = 0; i < 200; i++) {
-              var c = Module.HEAPU8[ptr + i];
-              if (c === 0) break;
-              if (c >= 32 && c < 127) str += String.fromCharCode(c);
+          if (typeof Module !== 'undefined' && Module.getExceptionMessage) {
+            var exMsg = Module.getExceptionMessage(ptr);
+            if (exMsg) msg += ' type="' + exMsg[0] + '" what="' + exMsg[1] + '"';
+          }
+        } catch(ex) {}
+        // Fallback: scan WASM memory for readable string near the pointer
+        try {
+          if (typeof Module !== 'undefined' && Module.HEAPU8) {
+            // Try several offsets where the what() string might be
+            var offsets = [0, 8, 16, 24, 32, 48, 64, 128];
+            for (var oi = 0; oi < offsets.length; oi++) {
+              var base = ptr + offsets[oi];
+              if (base < 0 || base >= Module.HEAPU8.length - 200) continue;
+              var str = '';
+              for (var i = 0; i < 200; i++) {
+                var c = Module.HEAPU8[base + i];
+                if (c === 0) break;
+                if (c >= 32 && c < 127) str += String.fromCharCode(c);
+                else { str = ''; break; } // non-printable = not a string
+              }
+              if (str.length > 4) {
+                msg += ' @+' + offsets[oi] + '="' + str + '"';
+                break;
+              }
             }
-            if (str.length > 5) msg += ' msg="' + str + '"';
           }
         } catch(ex) {}
       }
       addLine('error', [msg]);
     });
-    window.addEventListener('unhandledrejection', function(e) { addLine('error', ['Unhandled rejection: ' + e.reason]); });
+    window.addEventListener('unhandledrejection', function(e) {
+      var reason = e.reason;
+      var msg = 'Unhandled rejection: ';
+      if (typeof reason === 'number') {
+        msg += 'C++ exception ptr 0x' + reason.toString(16);
+        try {
+          if (typeof Module !== 'undefined' && Module.getExceptionMessage) {
+            var exMsg = Module.getExceptionMessage(reason);
+            if (exMsg) msg += ' type="' + exMsg[0] + '" what="' + exMsg[1] + '"';
+          }
+        } catch(ex) {}
+      } else {
+        msg += reason;
+      }
+      addLine('error', [msg]);
+    });
   })();
   </script>
 

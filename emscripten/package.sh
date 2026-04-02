@@ -68,7 +68,7 @@ EM_FLAGS=(
     "-fexceptions"
     "-sDISABLE_EXCEPTION_CATCHING=0"
     # Exports
-    "-sEXPORTED_RUNTIME_METHODS=[FS,callMain,ccall,cwrap]"
+    "-sEXPORTED_RUNTIME_METHODS=[FS,callMain,ccall,cwrap,getExceptionMessage]"
     "-sEXPORTED_FUNCTIONS=[_main,_malloc,_free]"
     "-sENVIRONMENT=web"
     "-sEXIT_RUNTIME=0"
