@@ -6,6 +6,7 @@
 #include "glm/fwd.hpp"
 #include "SceneMan.h"
 #include "Shader.h"
+#include "ParticleBatcher.h"
 
 #include <array>
 #include <atomic>
@@ -145,6 +146,9 @@ namespace RTE {
 
 		GLuint GetPaletteTexture() { return m_Palette8Texture; }
 
+		/// Get the particle batcher for GPU-accelerated particle rendering.
+		ParticleBatcher& GetParticleBatcher() { return m_ParticleBatcher; }
+
 	protected:
 		std::list<PostEffect> m_PostScreenEffects; //!< List of effects to apply at the end of each frame. This list gets cleared out and re-filled each frame.
 		std::list<PostEffect> m_PostSceneEffects; //!< All post-processing effects registered for this draw frame in the scene.
@@ -175,6 +179,7 @@ namespace RTE {
 		GLuint m_VertexArray; //!< Vertex array for post-processing effects.
 		std::unique_ptr<Shader> m_Blit8; //!< Shader for blitting the 8bpp backbuffer to the 32bpp backbuffer.
 		std::unique_ptr<Shader> m_PostProcessShader; //!< Shader for drawing bitmap post effects.
+		ParticleBatcher m_ParticleBatcher; //!< GPU-batched particle point renderer.
 
 #pragma region Post Effect Handling
 		/// Gets all screen effects that are located within a box in the scene. Their coordinates will be returned relative to the upper left corner of the box passed in here.

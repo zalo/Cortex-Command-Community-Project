@@ -10,6 +10,7 @@ sources += files(
 'GLCheck.cpp',
 'GraphicalPrimitive.cpp',
 'Draw.cpp',
+'ParticleBatcher.cpp',
 )
 
 # Emscripten renderer flags are added to the project compile args in the root meson.build

@@ -91,9 +91,11 @@ void PostProcessMan::InitializeGLPointers() {
 	GL_CHECK(glGenTextures(1, &m_Palette8Texture));
 	GL_CHECK(glGenVertexArrays(1, &m_VertexArray));
 	GL_CHECK(glGenBuffers(1, &m_VertexBuffer));
+	m_ParticleBatcher.Initialize();
 }
 
 void PostProcessMan::DestroyGLPointers() {
+	m_ParticleBatcher.Destroy();
 	GL_CHECK(glDeleteTextures(1, &m_BackBuffer8));
 	GL_CHECK(glDeleteTextures(1, &m_Palette8Texture));
 	GL_CHECK(glDeleteVertexArrays(1, &m_VertexArray));
@@ -376,6 +378,12 @@ void PostProcessMan::PostProcess() {
 	blit8Tex.format  = PIXELFORMAT_UNCOMPRESSED_GRAYSCALE; // single-channel
 	DrawTextureRec(blit8Tex, {0, 0, static_cast<float>(blit8Tex.width), -static_cast<float>(blit8Tex.height)}, {0.0f, 0.0f}, {255, 255, 255, 255});
 	m_Blit8->End();
+
+	// Draw GPU-batched particles (MOPixels + fluid) on top of the scene
+	if (m_ParticleBatcher.GetVertexCount() > 0) {
+		rlDrawRenderBatchActive(); // flush rlgl before raw GL
+		m_ParticleBatcher.Flush(m_Palette8Texture, blit8Tex.width, blit8Tex.height);
+	}
 
 	// Set the screen blender mode for glows
 	set_screen_blender(128, 128, 128, 128);

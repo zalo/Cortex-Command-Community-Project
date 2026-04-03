@@ -1,6 +1,8 @@
 #include "MovableMan.h"
 #include "Box2DManager.h"
 #include "FluidManager.h"
+#include "PostProcessMan.h"
+#include "ParticleBatcher.h"
 #include "TimerMan.h"
 
 #ifdef __EMSCRIPTEN__
@@ -1874,10 +1876,8 @@ void MovableMan::DrawMatter(BITMAP* pTargetBitmap, Vector& targetPos) {
 	for (std::deque<MovableObject*>::iterator parIt = --m_Particles.end(); parIt != --m_Particles.begin(); --parIt)
 		(*parIt)->Draw(pTargetBitmap, targetPos, g_DrawMaterial);
 
-	// Draw fluid particles as material
-	if (g_FluidMan.IsEnabled()) {
-		g_FluidMan.DrawMatter(pTargetBitmap, targetPos);
-	}
+	// NOTE: Fluid particles don't draw to the material bitmap.
+	// They settle into terrain via FluidManager::ProcessSettling() instead.
 }
 
 void MovableMan::VerifyMOIDIndex() {
@@ -1981,14 +1981,37 @@ void MovableMan::Draw(BITMAP* pTargetBitmap, const Vector& targetPos) {
 	{
 		ZoneScopedN("Particles Draw");
 
+		// GPU-batch MOPixels; fall back to CPU for MOSParticle and other types.
+		ParticleBatcher& batcher = g_PostProcessMan.GetParticleBatcher();
+		batcher.Clear();
+
 		for (std::deque<MovableObject*>::iterator parIt = m_Particles.begin(); parIt != m_Particles.end(); ++parIt) {
-			(*parIt)->Draw(pTargetBitmap, targetPos);
+			MovableObject* mo = *parIt;
+			// Only batch simple MOPixel color draws — MOSParticle (animated sprites) stay on CPU
+			if (batcher.IsReady() && mo->GetClassName() == "MOPixel") {
+				MOPixel* pixel = static_cast<MOPixel*>(mo);
+				Vector pos = pixel->GetPos() - targetPos;
+				batcher.Add(pos.GetX(), pos.GetY(), static_cast<float>(pixel->GetColorIndex()));
+			} else {
+				mo->Draw(pTargetBitmap, targetPos);
+			}
 		}
 
-		// Draw fluid particles
-		if (g_FluidMan.IsEnabled()) {
+		// Fluid particles also go into the GPU batch
+		if (g_FluidMan.IsEnabled() && batcher.IsReady()) {
+			int32_t fCount = g_FluidMan.GetParticleCount();
+			if (fCount > 0) {
+				const FluidSolver& solver = g_FluidMan.GetSolver();
+				batcher.AddBulk(solver.GetPositionsX(), solver.GetPositionsY(),
+				                g_FluidMan.GetPaletteIndices(),
+				                solver.GetFlags(), FPF_Zombie,
+				                fCount, targetPos.GetX(), targetPos.GetY(),
+				                pTargetBitmap->w, pTargetBitmap->h);
+			}
+		} else if (g_FluidMan.IsEnabled()) {
 			g_FluidMan.Draw(pTargetBitmap, targetPos);
 		}
+		// Batch is flushed in PostProcessMan::PostProcess()
 	}
 
 	{

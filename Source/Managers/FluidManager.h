@@ -54,6 +54,8 @@ public:
 	                    unsigned char materialIndex);
 
 	int GetParticleCount() const { return m_Solver.GetParticleCount(); }
+	const FluidSolver& GetSolver() const { return m_Solver; }
+	const unsigned char* GetPaletteIndices() const { return m_PaletteIndex.data(); }
 	void SetEnabled(bool enabled) { m_Enabled = enabled; }
 	bool IsEnabled() const { return m_Enabled; }
 	void SetDebugDraw(bool enable) { m_DebugDraw = enable; }
@@ -66,6 +68,9 @@ private:
 
 	/// CC material index per fluid particle (parallel to solver arrays).
 	std::vector<unsigned char> m_MaterialIndex;
+
+	/// Palette color index per particle (for 8bpp rendering).
+	std::vector<unsigned char> m_PaletteIndex;
 
 	/// Rest frame counter per particle for settling detection.
 	std::vector<int> m_RestFrames;
