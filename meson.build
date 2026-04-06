@@ -149,6 +149,7 @@ elif host_machine.system() == 'emscripten'
     '-sEXPORTED_FUNCTIONS=[\'_main\']',
     '-sENVIRONMENT=web',
     '-sEXIT_RUNTIME=0',
+    '-sGL_ENABLE_GET_PROC_ADDRESS=1',
     '-sASYNCIFY=1',
     '-sASYNCIFY_STACK_SIZE=65536',
     '--preload-file', 'Data/Base.rte@/Data/Base.rte',
