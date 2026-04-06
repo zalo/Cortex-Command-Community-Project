@@ -107,3 +107,8 @@ LogConsole.txt
 Console.dump.log
 Console.input.log
 imgui.ini
+
+# Development screenshots
+cccp-wasm-*.png
+wasm-*.png
+screen*.png
