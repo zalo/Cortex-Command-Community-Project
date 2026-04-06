@@ -24,7 +24,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pip ninja-build
+          sudo apt-get install -y python3-pip ninja-build ffmpeg
           pip3 install meson
 
       - name: Setup emsdk
