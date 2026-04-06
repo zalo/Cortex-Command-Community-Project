@@ -52,6 +52,7 @@ EM_FLAGS=(
     # WebGL2 / SDL3
     "-sUSE_WEBGL2=1"
     "-sFULL_ES3=1"
+    "-sGL_ENABLE_GET_PROC_ADDRESS=1"
     # Memory — IMPORTED_MEMORY required when linking against SDL3 static lib
     # which may have been built with different memory settings
     "-sALLOW_MEMORY_GROWTH=1"
