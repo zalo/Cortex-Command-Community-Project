@@ -46,6 +46,8 @@ jobs:
             -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-wasm
           cmake --build . -j$(nproc)
           cmake --install .
+          # Meson find_library searches /tmp/sdl3-wasm/ directly
+          cp /tmp/sdl3-wasm/lib/libSDL3.a /tmp/sdl3-wasm/libSDL3.a
 
       - name: Configure Meson
         run: |
