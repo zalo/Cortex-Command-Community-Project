@@ -1,0 +1,90 @@
+name: Deploy WASM to GitHub Pages
+
+on:
+  push:
+    branches: [emscripten-port]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip ninja-build
+          pip3 install meson
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.51
+
+      - name: Build SDL3 for WASM
+        run: |
+          cd external/sources/SDL3-3.2.10
+          mkdir -p build-wasm && cd build-wasm
+          emcmake cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_SHARED=OFF \
+            -DSDL_STATIC=ON \
+            -DSDL_TEST=OFF \
+            -DSDL_TESTS=OFF \
+            -DSDL_EXAMPLES=OFF \
+            -DCMAKE_INSTALL_PREFIX=/tmp/sdl3-wasm
+          cmake --build . -j$(nproc)
+          cmake --install .
+
+      - name: Configure Meson
+        run: |
+          meson setup build-web \
+            --cross-file emscripten/cross_compilation.ini \
+            -Demscripten_port=true \
+            -Dtracy_enable=false
+
+      - name: Build
+        run: ninja -C build-web
+
+      - name: Package
+        run: bash emscripten/package.sh
+
+      - name: Prepare Pages artifact
+        run: |
+          mkdir -p _site/Data
+          cp build-web/CortexCommand.html _site/index.html
+          cp build-web/CortexCommand.js _site/
+          cp build-web/CortexCommand.wasm _site/
+          cp build-web/CortexCommand.data _site/
+          cp build-web/touchpad.js _site/ 2>/dev/null || true
+          # Module zips must be at Data/<name>.zip (matching fetch URLs)
+          cp build-web/Data/*.zip _site/Data/ 2>/dev/null || true
+          # Redirect CortexCommand.html → index.html for compat
+          echo '<meta http-equiv="refresh" content="0;url=index.html">' > _site/CortexCommand.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
