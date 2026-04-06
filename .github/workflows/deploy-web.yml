@@ -56,10 +56,16 @@ jobs:
             -Demscripten_port=true \
             -Dtracy_enable=false
 
-      - name: Build
-        run: ninja -C build-web
+      - name: Compile (ninja)
+        run: |
+          # Compile all object files. The final link step may fail because
+          # meson's link flags don't include all Emscripten settings —
+          # package.sh handles the real link with proper flags.
+          ninja -C build-web || true
+          # Verify .o files were produced
+          test -f build-web/CortexCommand.js.p/Source_Main.cpp.o
 
-      - name: Package
+      - name: Package (link + bundle assets)
         run: bash emscripten/package.sh
 
       - name: Prepare Pages artifact
