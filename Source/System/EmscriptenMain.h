@@ -65,8 +65,46 @@ enum class WebLoopState {
 static WebLoopState s_WebLoopState = WebLoopState::Menu;
 static bool s_AutoStartChecked = false;
 static bool s_BuildTimestampLogged = false;
+static int s_LastAppliedResW = 0;
+static int s_LastAppliedResH = 0;
+static int s_FrameCount = 0;
+
+/// Check if the browser container has been resized and apply the new resolution.
+/// Render resolution matches the container 1:1 (container is already 16:9).
+inline bool CheckAndApplyBrowserResize() {
+    int browserW = EM_ASM_INT({ return window._ccPendingResizeW || 0; });
+    int browserH = EM_ASM_INT({ return window._ccPendingResizeH || 0; });
+
+    if (browserW <= 0 || browserH <= 0) return false;
+    if (browserW == s_LastAppliedResW && browserH == s_LastAppliedResH) return false;
+
+    // Skip resize for the first 120 frames (~2 seconds) to let init + autostart settle
+    if (s_FrameCount < 120) return false;
+
+    s_LastAppliedResW = browserW;
+    s_LastAppliedResH = browserH;
+
+    // Clamp to even numbers and enforce minimum 640x360
+    int renderW = std::max(640, browserW & ~1);
+    int renderH = std::max(360, browserH & ~1);
+
+    if (renderW == g_WindowMan.GetResX() && renderH == g_WindowMan.GetResY()) {
+        return false;
+    }
+
+    EM_ASM({ console.log('[CC] Resize: container=' + $0 + 'x' + $1); },
+           renderW, renderH);
+
+    EM_ASM({ if (window.ccResizeCanvases) ccResizeCanvases($0, $1); },
+           renderW, renderH);
+
+    g_WindowMan.ChangeResolution(renderW, renderH, 1.0f, false, false);
+    return true;
+}
 
 /// Check URL ?autostart parameter and launch directly into a skirmish game.
+/// Desktop: launches Skirmish Defense on Grasslands with keyboard-only P1 vs CPU.
+/// Mobile: skips autostart so user lands on main menu to configure controls.
 /// Usage: CortexCommand.html?autostart
 inline bool CheckAutoStart() {
     if (s_AutoStartChecked) return false;
@@ -77,7 +115,7 @@ inline bool CheckAutoStart() {
     });
     if (!hasParam) return false;
 
-    EM_ASM({ console.log('[CC] AutoStart: launching skirmish...'); });
+    EM_ASM({ console.log('[CC] AutoStart: launching Skirmish Defense on Grasslands...'); });
 
     // Find activity preset
     const Entity* basePreset = g_PresetMan.GetEntityPreset("GAScripted", "Skirmish Defense");
@@ -91,11 +129,11 @@ inline bool CheckAutoStart() {
         return false;
     }
 
-    // Set scene
-    int sceneResult = g_SceneMan.SetSceneToLoad("Metankora Highlands", true, false);
-    EM_ASM({ console.log('[CC] AutoStart: SetSceneToLoad result=' + $0); }, sceneResult);
+    // Set scene to Grasslands
+    int sceneResult = g_SceneMan.SetSceneToLoad("Grasslands", true, false);
+    EM_ASM({ console.log('[CC] AutoStart: SetSceneToLoad("Grasslands") result=' + $0); }, sceneResult);
 
-    // Configure game
+    // Configure: Player 1 keyboard-only on Team 1, CPU on Team 2
     game->SetDifficulty(Activity::DifficultySetting::EasyDifficulty);
     game->SetStartingGold(5000);
     game->ClearPlayers(false);
@@ -104,6 +142,12 @@ inline bool CheckAutoStart() {
     game->SetTeamAISkill(Activity::Teams::TeamTwo, Activity::AISkillSetting::DefaultSkill);
     game->SetTeamTech(Activity::Teams::TeamOne, "-All-");
     game->SetTeamTech(Activity::Teams::TeamTwo, "-All-");
+
+    // Force keyboard-only for Player 1
+    InputScheme* p1Scheme = g_UInputMan.GetControlScheme(Players::PlayerOne);
+    if (p1Scheme) {
+        p1Scheme->ResetToPlayerDefaults(Players::PlayerOne);
+    }
 
     g_ActivityMan.SetStartActivity(game);
     g_ActivityMan.SetRestartActivity();
@@ -121,6 +165,7 @@ inline void WebMainLoopIteration_Impl() {
         EM_ASM({ console.log('[CC] Build: ' + UTF8ToString($0) + ' ' + UTF8ToString($1)); },
                __DATE__, __TIME__);
     }
+    s_FrameCount++;
     if (System::IsSetToQuit()) {
         s_WebLoopState = WebLoopState::Quit;
         emscripten_cancel_main_loop();
@@ -131,6 +176,14 @@ inline void WebMainLoopIteration_Impl() {
 
     // -----------------------------------------------------------------------
     case WebLoopState::Menu: {
+        // AutoStart check FIRST — before resize can trigger Reinitialize()
+        // which disrupts the menu state on mobile.
+        bool autoStarting = false;
+        if (!s_AutoStartChecked) {
+            autoStarting = CheckAutoStart();
+        }
+
+        CheckAndApplyBrowserResize();
         g_WindowMan.ClearBackbuffer();
         PollSDLEvents();
         if (System::IsSetToQuit()) break;
@@ -143,7 +196,10 @@ inline void WebMainLoopIteration_Impl() {
         g_MusicMan.Update();
 
         if (g_WindowMan.ResolutionChanged()) {
-            g_MenuMan.Reinitialize();
+            // Skip menu reinitialize if we're about to autostart anyway
+            if (!autoStarting) {
+                g_MenuMan.Reinitialize();
+            }
             g_ConsoleMan.Destroy();
             g_ConsoleMan.Initialize();
             g_LoadingScreen.CreateLoadingSplash();
@@ -152,10 +208,7 @@ inline void WebMainLoopIteration_Impl() {
 
         bool doneWithMenu = g_MenuMan.Update();
 
-        // AutoStart: skip the menu and jump straight into a skirmish.
-        // SetRestartActivity was already called in CheckAutoStart — the
-        // pre-sim handler in the Game state will call RestartActivity().
-        if (CheckAutoStart()) {
+        if (autoStarting) {
             doneWithMenu = true;
         }
 
@@ -180,6 +233,14 @@ inline void WebMainLoopIteration_Impl() {
 
     // -----------------------------------------------------------------------
     case WebLoopState::Game: {
+        CheckAndApplyBrowserResize();
+        // Handle resolution change during gameplay
+        if (g_WindowMan.ResolutionChanged()) {
+            g_ConsoleMan.Destroy();
+            g_ConsoleMan.Initialize();
+            g_WindowMan.CompleteResolutionChange();
+        }
+
         PollSDLEvents();
         if (System::IsSetToQuit()) break;
 
@@ -220,22 +281,32 @@ inline void WebMainLoopIteration_Impl() {
 
             g_PerformanceMan.StartPerformanceMeasurement(PerformanceMan::SimTotal);
 
-            g_LuaMan.Update();
-            g_UInputMan.Update();
-            g_FrameMan.Update();
-            g_MovableMan.CompleteQueuedMOIDDrawings();
-            g_ConsoleMan.Update();
-            g_ActivityMan.Update();
+#define SIM_TRY(label, code) \
+    try { code; } catch (const std::exception& e) { \
+        EM_ASM({ console.error('[CC] CRASH in ' + UTF8ToString($0) + ': ' + UTF8ToString($1)); }, label, e.what()); \
+    } catch (...) { \
+        EM_ASM({ console.error('[CC] CRASH in ' + UTF8ToString($0) + ': unknown'); }, label); \
+    }
 
-            if (g_SceneMan.GetScene()) g_SceneMan.GetScene()->Update();
+            SIM_TRY("LuaMan.Update",       g_LuaMan.Update());
+            SIM_TRY("UInputMan.Update",     g_UInputMan.Update());
+            SIM_TRY("FrameMan.Update",      g_FrameMan.Update());
+            SIM_TRY("MOID Drawings",        g_MovableMan.CompleteQueuedMOIDDrawings());
+            SIM_TRY("ConsoleMan.Update",    g_ConsoleMan.Update());
+            SIM_TRY("ActivityMan.Update",   g_ActivityMan.Update());
 
-            g_LuaMan.ClearScriptTimings();
-            g_MovableMan.Update();
-            g_PerformanceMan.UpdateSortedScriptTimings(g_LuaMan.GetScriptTimings());
-            g_AudioMan.Update();
-            g_MusicMan.Update();
-            g_ActivityMan.LateUpdateGlobalScripts();
-            g_PresetMan.ClearReloadEntityPresetCalledThisUpdate();
+            SIM_TRY("Scene.Update",
+                     if (g_SceneMan.GetScene()) g_SceneMan.GetScene()->Update());
+
+            SIM_TRY("LuaMan.ClearTimings",  g_LuaMan.ClearScriptTimings());
+            SIM_TRY("MovableMan.Update",     g_MovableMan.Update());
+            SIM_TRY("ScriptTimings",         g_PerformanceMan.UpdateSortedScriptTimings(g_LuaMan.GetScriptTimings()));
+            SIM_TRY("AudioMan.Update",       g_AudioMan.Update());
+            SIM_TRY("MusicMan.Update",       g_MusicMan.Update());
+            SIM_TRY("LateGlobalScripts",     g_ActivityMan.LateUpdateGlobalScripts());
+            SIM_TRY("PresetMan.ClearReload", g_PresetMan.ClearReloadEntityPresetCalledThisUpdate());
+
+#undef SIM_TRY
 
             g_PerformanceMan.StopPerformanceMeasurement(PerformanceMan::SimTotal);
             g_UInputMan.EndFrame();
@@ -300,13 +371,11 @@ inline void WebMainLoopIteration_Impl() {
             static bool f11WasDown = false;
             bool f11Down = EM_ASM_INT({ return window._ccFluidSpawn ? 1 : 0; });
             if (f11Down && !f11WasDown) {
-                // Spawn at camera center
-                Vector camPos = g_CameraMan.GetScrollTarget();
-                float halfW = g_FrameMan.GetPlayerScreenWidth() * 0.5f;
-                float halfH = g_FrameMan.GetPlayerScreenHeight() * 0.5f;
-                g_FluidMan.SpawnFluidRect(camPos.GetX() + halfW - 50,
-                                          camPos.GetY() + halfH - 80,
-                                          100, 60, 160); // 160 = Water material
+                // Spawn at screen center using camera offset (top-left of visible area)
+                Vector camOff = g_CameraMan.GetOffset(0);
+                float cx = camOff.GetX() + g_FrameMan.GetPlayerScreenWidth() * 0.5f;
+                float cy = camOff.GetY() + g_FrameMan.GetPlayerScreenHeight() * 0.5f;
+                g_FluidMan.SpawnFluidRect(cx - 50, cy - 40, 100, 60, 160);
             }
             f11WasDown = f11Down;
         }

@@ -107,3 +107,16 @@ LogConsole.txt
 Console.dump.log
 Console.input.log
 imgui.ini
+
+# Development screenshots
+cccp-wasm-*.png
+wasm-*.png
+screen*.png
+
+# Box2D extras (not needed for build)
+external/sources/box2d-3.1.0/benchmark/
+external/sources/box2d-3.1.0/docs/
+external/sources/box2d-3.1.0/samples/
+external/sources/box2d-3.1.0/shared/
+external/sources/box2d-3.1.0/test/
+external/sources/box2d-3.1.0/.github/

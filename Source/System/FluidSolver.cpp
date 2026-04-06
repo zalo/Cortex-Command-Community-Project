@@ -174,7 +174,7 @@ void FluidSolver::SortProxies() {
 }
 
 // ---------------------------------------------------------------------------
-// Contact finding (LiquidFun's sorted-scan approach)
+// Contact finding (hash-grid with cell buckets)
 // ---------------------------------------------------------------------------
 
 void FluidSolver::FindContacts() {
@@ -183,45 +183,56 @@ void FluidSolver::FindContacts() {
 	float diameter = m_Config.particleRadius * 2.0f;
 	float diameterSq = diameter * diameter;
 	float invDiameter = 1.0f / diameter;
+	float invCellSize = 1.0f / diameter;
 
-	// For each particle (in sorted order), check particles to the right
-	// and in the row below. Because proxies are sorted by tag, nearby
-	// particles in 2D space are adjacent in the array.
-	for (int32_t a = 0; a < m_Count; ++a) {
-		int32_t idxA = m_Proxies[a].index;
-		uint32_t tagA = m_Proxies[a].tag;
+	// Build a hash map: cell tag → list of particle indices
+	// Using the sorted proxy array + binary search for each cell
+	// For each pair (a, b) where a < b, check distance
 
+	// Simple O(N * K) approach: for each particle, binary-search sorted
+	// proxies for each of the 9 neighboring cells.
+	for (int32_t i = 0; i < m_Count; ++i) {
+		int32_t idxA = i;
 		if (m_Flags[idxA] & FPF_Zombie) continue;
 
 		float ax = m_PosX[idxA];
 		float ay = m_PosY[idxA];
+		int32_t cx = static_cast<int32_t>(ax * invCellSize + 32768.0f);
+		int32_t cy = static_cast<int32_t>(ay * invCellSize + 32768.0f);
 
-		// Scan forward — particles in same or adjacent cells
-		// The tag encodes (gridY << 16 | gridX), so adjacent cells
-		// differ by at most 0x10001 in tag value.
-		uint32_t maxTag = tagA + 0x00020002; // 2 rows ahead, 2 cols ahead
+		// Check all 9 neighboring cells
+		for (int dy = -1; dy <= 1; ++dy) {
+			for (int dx = -1; dx <= 1; ++dx) {
+				uint32_t cellTag = (static_cast<uint32_t>(cy + dy) << 16) |
+				                   (static_cast<uint32_t>(cx + dx) & 0xFFFF);
 
-		for (int32_t b = a + 1; b < m_Count; ++b) {
-			uint32_t tagB = m_Proxies[b].tag;
-			if (tagB > maxTag) break; // Too far in sorted order
+				// Binary search for first proxy with this tag
+				int32_t lo = 0, hi = m_Count;
+				while (lo < hi) {
+					int32_t mid = (lo + hi) / 2;
+					if (m_Proxies[mid].tag < cellTag) lo = mid + 1;
+					else hi = mid;
+				}
 
-			int32_t idxB = m_Proxies[b].index;
-			if (m_Flags[idxB] & FPF_Zombie) continue;
+				// Check all particles in this cell
+				for (int32_t j = lo; j < m_Count && m_Proxies[j].tag == cellTag; ++j) {
+					int32_t idxB = m_Proxies[j].index;
+					if (idxB <= idxA) continue; // Only check pairs where B > A
+					if (m_Flags[idxB] & FPF_Zombie) continue;
 
-			float dx = m_PosX[idxB] - ax;
-			float dy = m_PosY[idxB] - ay;
-			float distSq = dx * dx + dy * dy;
+					float ddx = m_PosX[idxB] - ax;
+					float ddy = m_PosY[idxB] - ay;
+					float distSq = ddx * ddx + ddy * ddy;
 
-			if (distSq < diameterSq && distSq > 1e-8f) {
-				float dist = std::sqrt(distSq);
-				float weight = 1.0f - dist * invDiameter;
-				float invDist = 1.0f / dist;
-
-				m_Contacts.push_back({
-					idxA, idxB,
-					weight,
-					dx * invDist, dy * invDist
-				});
+					if (distSq < diameterSq && distSq > 1e-8f) {
+						float dist = std::sqrt(distSq);
+						m_Contacts.push_back({
+							idxA, idxB,
+							1.0f - dist * invDiameter,
+							ddx / dist, ddy / dist
+						});
+					}
+				}
 			}
 		}
 	}

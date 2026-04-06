@@ -272,7 +272,7 @@ void AtomGroup::AddAtoms(const std::vector<Atom*>& atomList, long subgroupID, co
 		atomToAdd->SetOwner(m_OwnerMOSR);
 		atomToAdd->SetIgnoreMOIDsByGroup(&m_IgnoreMOIDs);
 		m_Atoms.push_back(atomToAdd);
-		m_SubGroups.at(subgroupID).push_back(atomToAdd);
+		m_SubGroups[subgroupID].push_back(atomToAdd);
 	}
 	if (!atomList.empty()) {
 		m_MomentOfInertia = 0.0F;

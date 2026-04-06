@@ -90,15 +90,14 @@ window._ccFluidDebug = 0;
 window._ccFluidSpawn = 0;
 (function() {
   document.addEventListener('keydown', function(e) {
-    // F10: toggle fluid debug draw
-    if (e.key === 'F10') {
-      e.preventDefault();
+    // N: toggle fluid debug draw
+    if (e.key === 'n' || e.key === 'N') {
       window._ccFluidDebug = 1;
       setTimeout(function() { window._ccFluidDebug = 0; }, 100);
+      console.log('[Fluid] Debug toggle');
     }
-    // F11: spawn water rectangle at screen center
-    if (e.key === 'F11') {
-      e.preventDefault();
+    // M: spawn water rectangle at screen center
+    if (e.key === 'm' || e.key === 'M') {
       window._ccFluidSpawn = 1;
       setTimeout(function() { window._ccFluidSpawn = 0; }, 100);
       console.log('[Fluid] Spawning water...');

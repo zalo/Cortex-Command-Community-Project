@@ -227,7 +227,8 @@ int MovableObject::Create(const MovableObject& reference) {
 
 	m_ForceIntoMasterLuaState = reference.m_ForceIntoMasterLuaState;
 	for (const auto& scriptPath: reference.m_AllLoadedScripts) {
-		LoadScript(scriptPath, reference.m_EnabledScripts.at(scriptPath));
+		auto enabledIt = reference.m_EnabledScripts.find(scriptPath);
+		LoadScript(scriptPath, enabledIt != reference.m_EnabledScripts.end() ? enabledIt->second : true);
 	}
 
 	if (reference.m_pScreenEffect) {
@@ -555,7 +556,9 @@ int MovableObject::LoadScript(const std::string& scriptPath, bool loadAsEnabledS
 	}
 
 	for (const auto& [functionName, functionObject]: scriptFileFunctions) {
-		LuaFunction& luaFunction = m_FunctionsAndScripts.at(functionName).emplace_back();
+		auto it = m_FunctionsAndScripts.find(functionName);
+		if (it == m_FunctionsAndScripts.end()) { delete functionObject; continue; }
+		LuaFunction& luaFunction = it->second.emplace_back();
 		luaFunction.m_ScriptIsEnabled = loadAsEnabledScript;
 		luaFunction.m_LuaFunction = std::unique_ptr<LuabindObjectWrapper>(functionObject);
 	}
@@ -609,7 +612,8 @@ int MovableObject::InitializeObjectScripts() {
 		RTEAbort("Failed to initialize object scripts for " + GetModuleAndPresetName() + ". Please report this to a developer.");
 	}
 
-	if (!m_FunctionsAndScripts.at("Create").empty() && RunScriptedFunctionInAppropriateScripts("Create", false, true) < 0) {
+	auto createIt = m_FunctionsAndScripts.find("Create");
+	if (createIt != m_FunctionsAndScripts.end() && !createIt->second.empty() && RunScriptedFunctionInAppropriateScripts("Create", false, true) < 0) {
 		m_ScriptObjectName = "ERROR";
 		return -1;
 	}
@@ -689,7 +693,9 @@ int MovableObject::RunFunctionOfScript(const std::string& scriptPath, const std:
 	LuaStateWrapper& usedState = GetAndLockStateForScript(scriptPath);
 	std::lock_guard<std::recursive_mutex> lock(usedState.GetMutex(), std::adopt_lock);
 
-	for (const LuaFunction& luaFunction: m_FunctionsAndScripts.at(functionName)) {
+	auto funcIt = m_FunctionsAndScripts.find(functionName);
+	if (funcIt == m_FunctionsAndScripts.end()) { return -1; }
+	for (const LuaFunction& luaFunction: funcIt->second) {
 		const LuabindObjectWrapper* luabindObjectWrapper = luaFunction.m_LuaFunction.get();
 		if (scriptPath == luabindObjectWrapper->GetFilePath() && usedState.RunScriptFunctionObject(luabindObjectWrapper, "_ScriptedObjects", std::to_string(m_UniqueID), functionEntityArguments, functionLiteralArguments) < 0) {
 			g_ConsoleMan.PrintString("ERROR: An error occured while trying to run the " + functionName + " function for script at path " + scriptPath);

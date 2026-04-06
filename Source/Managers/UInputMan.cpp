@@ -1,5 +1,9 @@
 #include "UInputMan.h"
 #include "Constants.h"
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
 #include "SceneMan.h"
 #include "ActivityMan.h"
 #include "MetaMan.h"
@@ -126,6 +130,17 @@ int UInputMan::Initialize() {
 	    0,
 	    static_cast<int>(g_FrameMan.GetPlayerFrameBufferWidth(Players::NoPlayer) * g_WindowMan.GetResMultiplier()),
 	    static_cast<int>(g_FrameMan.GetPlayerFrameBufferHeight(Players::NoPlayer) * g_WindowMan.GetResMultiplier())};
+
+#ifdef __EMSCRIPTEN__
+	// On touch devices, force Player 1 to keyboard-only controls.
+	// Saved settings may have mouse+keyboard from a previous session.
+	bool isTouchDevice = EM_ASM_INT({
+		return ('ontouchstart' in window || navigator.maxTouchPoints > 0) ? 1 : 0;
+	});
+	if (isTouchDevice && m_ControlScheme[Players::PlayerOne].GetDevice() == InputDevice::DEVICE_MOUSE_KEYB) {
+		m_ControlScheme[Players::PlayerOne].ResetToPlayerDefaults(Players::PlayerOne);
+	}
+#endif
 
 	return 0;
 }

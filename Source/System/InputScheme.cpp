@@ -130,9 +130,16 @@ int InputScheme::Save(Writer& writer) const {
 void InputScheme::ResetToPlayerDefaults(Players player) {
 	switch (player) {
 		case Players::PlayerOne:
+#ifdef __EMSCRIPTEN__
+			// Keyboard-only on web — mouse aiming conflicts with touch controls
+			m_ActiveDevice = InputDevice::DEVICE_KEYB_ONLY;
+			m_DeviceID.keyboard = {0};
+			SetPreset(InputPreset::PresetWASDKeys);
+#else
 			m_ActiveDevice = InputDevice::DEVICE_MOUSE_KEYB;
 			m_DeviceID.mouseKeyboard = {0, 0};
 			SetPreset(InputPreset::PresetMouseWASDKeys);
+#endif
 			break;
 		case Players::PlayerTwo:
 			m_ActiveDevice = InputDevice::DEVICE_KEYB_ONLY;

@@ -44,8 +44,8 @@ void FluidManager::Initialize() {
 	config.particleStride = 0.75f;
 	config.gravityX = 0.0f;
 	config.gravityY = g_SceneMan.GetGlobalAcc().GetY() * 20.0f; // Convert m/s² to px/s²
-	config.pressureStrength = 0.05f;
-	config.dampingStrength = 1.0f;
+	config.pressureStrength = 0.5f;    // Strong pressure to prevent collapse
+	config.dampingStrength = 0.5f;
 	config.viscousStrength = 0.25f;
 	config.restitution = 0.1f;     // Water is inelastic
 	config.friction = 0.02f;
@@ -64,6 +64,7 @@ void FluidManager::Initialize() {
 	});
 
 	m_MaterialIndex.resize(config.maxParticles, 0);
+	m_PaletteIndex.resize(config.maxParticles, 0);
 	m_RestFrames.resize(config.maxParticles, 0);
 	m_Enabled = true;
 
@@ -89,6 +90,10 @@ void FluidManager::Reset() {
 
 void FluidManager::Step(float deltaTime) {
 	if (!m_Enabled || m_Solver.GetParticleCount() == 0) return;
+
+	// Update gravity from current scene (may not be loaded at init time)
+	float gravY = g_SceneMan.GetGlobalAcc().GetY() * Box2DManager::PPM;
+	m_Solver.SetGravity(0.0f, gravY);
 
 	m_Solver.Step(deltaTime);
 	ApplyBodyImpulses();
@@ -297,25 +302,26 @@ void FluidManager::SpawnFluid(float px, float py, float vx, float vy,
                                unsigned char materialIndex, int count) {
 	if (!m_Enabled) return;
 
-	// Look up material color
 	const Material* mat = g_SceneMan.GetMaterialFromID(materialIndex);
-	uint32_t color = 0xFF4488CC; // Default blue-ish water
+	uint32_t color = 0xFF4488CC;
+	unsigned char palIdx = 133; // Default blue-ish palette index
 	if (mat) {
 		Color matColor = mat->GetColor();
 		color = (0xFF << 24) | (matColor.GetR() << 16) | (matColor.GetG() << 8) | matColor.GetB();
+		palIdx = static_cast<unsigned char>(matColor.GetIndex());
 	}
 
 	float radius = m_Solver.GetConfig().particleRadius;
 	float spacing = radius * 2.0f * m_Solver.GetConfig().particleStride;
 
 	for (int i = 0; i < count; ++i) {
-		// Slight random offset to prevent grid artifacts
 		float ox = (static_cast<float>(rand()) / RAND_MAX - 0.5f) * spacing;
 		float oy = (static_cast<float>(rand()) / RAND_MAX - 0.5f) * spacing;
 
 		int32_t idx = m_Solver.AddParticle(px + ox, py + oy, vx, vy, FPF_Water, color);
 		if (idx >= 0) {
 			m_MaterialIndex[idx] = materialIndex;
+			m_PaletteIndex[idx] = palIdx;
 			m_RestFrames[idx] = 0;
 		}
 	}
@@ -334,9 +340,11 @@ void FluidManager::SpawnFluidRect(float x, float y, float w, float h,
 
 	const Material* mat = g_SceneMan.GetMaterialFromID(materialIndex);
 	uint32_t color = 0xFF4488CC;
+	unsigned char palIdx = 133;
 	if (mat) {
 		Color matColor = mat->GetColor();
 		color = (0xFF << 24) | (matColor.GetR() << 16) | (matColor.GetG() << 8) | matColor.GetB();
+		palIdx = static_cast<unsigned char>(matColor.GetIndex());
 	}
 
 	float spacing = m_Solver.GetConfig().particleRadius * 2.0f * m_Solver.GetConfig().particleStride;
@@ -347,6 +355,7 @@ void FluidManager::SpawnFluidRect(float x, float y, float w, float h,
 			int32_t idx = m_Solver.AddParticle(px, py, 0.0f, 0.0f, FPF_Water, color);
 			if (idx >= 0) {
 				m_MaterialIndex[idx] = materialIndex;
+				m_PaletteIndex[idx] = palIdx;
 				m_RestFrames[idx] = 0;
 				spawned++;
 			}
@@ -369,13 +378,14 @@ void FluidManager::Draw(BITMAP* targetBitmap, const Vector& cameraOffset) {
 	int32_t count = m_Solver.GetParticleCount();
 	const float* posX = m_Solver.GetPositionsX();
 	const float* posY = m_Solver.GetPositionsY();
-	const uint32_t* colors = m_Solver.GetColors();
 	const uint32_t* flags = m_Solver.GetFlags();
+	const uint32_t* colors = m_Solver.GetColors();
 
 	float camX = cameraOffset.GetX();
 	float camY = cameraOffset.GetY();
 	int bw = targetBitmap->w;
 	int bh = targetBitmap->h;
+	bool is8bpp = (targetBitmap->bpp() == 1);
 
 	for (int32_t i = 0; i < count; ++i) {
 		if (flags[i] & FPF_Zombie) continue;
@@ -385,9 +395,11 @@ void FluidManager::Draw(BITMAP* targetBitmap, const Vector& cameraOffset) {
 
 		if (sx < 0 || sy < 0 || sx >= bw || sy >= bh) continue;
 
-		// For 8bpp buffer, use material index as color
-		// For 32bpp buffer, use packed RGBA
-		putpixel(targetBitmap, sx, sy, static_cast<int>(colors[i]));
+		if (is8bpp) {
+			putpixel(targetBitmap, sx, sy, m_PaletteIndex[i]);
+		} else {
+			putpixel(targetBitmap, sx, sy, static_cast<int>(colors[i]));
+		}
 	}
 }
 

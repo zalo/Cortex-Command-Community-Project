@@ -96,6 +96,9 @@ public:
 	void SetTerrainQuery(TerrainQueryFn fn) { m_TerrainQuery = std::move(fn); }
 	void SetBodyQuery(BodyQueryFn fn) { m_BodyQuery = std::move(fn); }
 
+	/// Update gravity (call when scene changes).
+	void SetGravity(float gx, float gy) { m_Config.gravityX = gx; m_Config.gravityY = gy; }
+
 	/// Read-only access to particle data (SoA layout).
 	int32_t GetParticleCount() const { return m_Count; }
 	const float* GetPositionsX() const { return m_PosX.data(); }

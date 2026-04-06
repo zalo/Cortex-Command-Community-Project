@@ -7,16 +7,22 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
+    html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
     body {
+      margin: 0;
+      padding: 0;
       background: #0d0d0d;
       color: #ccc;
       font-family: 'Courier New', monospace;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
       min-height: 100vh;
-      overflow: hidden;
+      /* Allow scrolling to see the debug console below the game */
     }
 
     #title-bar {
@@ -24,15 +30,24 @@
       color: #555;
       letter-spacing: 2px;
       text-transform: uppercase;
-      margin-bottom: 8px;
+      margin: 4px 0;
+      flex: 0 0 auto;
     }
 
-    /* Container that holds both the WebGL canvas (game) and the 2D overlay canvas */
+    /* Container that holds both the WebGL canvas (game) and the 2D overlay canvas.
+       Fixed 16:9 aspect ratio, sized to fit within the viewport. */
     #canvas-container {
       position: relative;
-      display: inline-block;
+      aspect-ratio: 16 / 9;
+      /* Fill width but cap height to viewport minus chrome */
+      width: min(100%, calc((100vh - 60px) * 16 / 9));
+      max-height: calc(100vh - 60px);
+      min-width: 640px;
+      min-height: 360px;
+      flex: 0 0 auto;
       border: 1px solid #222;
-      /* Will be resized by JS to match game resolution */
+      box-sizing: border-box;
+      overflow: hidden;
     }
 
     /*
@@ -42,6 +57,8 @@
      */
     #canvas {
       display: block;
+      width: 100%;
+      height: 100%;
       image-rendering: pixelated;   /* nearest-neighbor for pixel-perfect upscale */
       image-rendering: crisp-edges;
     }
@@ -65,10 +82,11 @@
     #overlay-canvas {
       position: absolute;
       top: 0; left: 0;
+      width: 100%;
+      height: 100%;
       display: block;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
-      /* Start transparent so the WebGL canvas shows through */
       opacity: 1;
       pointer-events: none;  /* Let mouse events fall through to the GL canvas */
     }
@@ -119,14 +137,16 @@
       font-size: 9px;
       color: #333;
       letter-spacing: 1px;
-      margin-top: 6px;
+      margin-top: 4px;
       text-transform: uppercase;
+      flex: 0 0 auto;
     }
 
     #controls-bar {
       display: flex;
       gap: 8px;
-      margin-top: 6px;
+      margin-top: 4px;
+      flex: 0 0 auto;
     }
 
     .ctrl-btn {
@@ -164,7 +184,7 @@
 
   <div id="title-bar">Cortex Command Community Project &mdash; Web Build</div>
 
-  <div id="canvas-container" style="width:960px;height:600px;">
+  <div id="canvas-container">
     <!-- WebGL canvas — SDL3/Emscripten renders here via OpenGL ES 3 -->
     <canvas id="canvas" width="960" height="600" tabindex="0"></canvas>
 
@@ -503,15 +523,38 @@
        * Resize both canvases to match a new game resolution.
        */
       window.ccResizeCanvases = function(w, h) {
-        var container = document.getElementById('canvas-container');
         var glCanvas  = document.getElementById('canvas');
         var ovCanvas  = document.getElementById('overlay-canvas');
-        if (container) { container.style.width = w + 'px'; container.style.height = h + 'px'; }
         if (glCanvas)  { glCanvas.width = w;  glCanvas.height = h; }
         if (ovCanvas)  { ovCanvas.width = w;  ovCanvas.height = h; }
         // Invalidate cached ImageData
         _imgW = 0; _imgH = 0; _imageData = null;
       };
+    })();
+
+    // =========================================================================
+    // Dynamic resize — observe container size and notify C++ each frame.
+    // =========================================================================
+    (function() {
+      window._ccPendingResizeW = 0;
+      window._ccPendingResizeH = 0;
+      var resizeTimer = null;
+      var container = document.getElementById('canvas-container');
+      if (container && typeof ResizeObserver !== 'undefined') {
+        var obs = new ResizeObserver(function(entries) {
+          var entry = entries[0];
+          var w = Math.floor(entry.contentRect.width);
+          var h = Math.floor(entry.contentRect.height);
+          // Clamp to even numbers and enforce minimum
+          w = Math.max(640, w & ~1);
+          h = Math.max(360, h & ~1);
+          if (w !== window._ccPendingResizeW || h !== window._ccPendingResizeH) {
+            window._ccPendingResizeW = w;
+            window._ccPendingResizeH = h;
+          }
+        });
+        obs.observe(container);
+      }
     })();
 
     // =========================================================================
